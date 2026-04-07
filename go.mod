@@ -4,7 +4,7 @@ go 1.25.8
 
 require (
 	github.com/itchyny/timefmt-go v0.1.7
-	github.com/sosodev/duration v1.3.1
+	github.com/sosodev/duration v1.4.0
 	github.com/stretchr/testify v1.11.1
 	github.com/zclconf/go-cty v1.18.0
 )
