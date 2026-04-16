@@ -25,7 +25,6 @@ func GetTimeFunctions() map[string]function.Function {
 		"adddays":   AddDaysFunc,
 		// Time decomposition
 		"unix":       UnixFunc,
-		"timepart":   TimePartFunc,
 		"timezone":   TimezoneFunc,
 		"intimezone": InTimezoneFunc,
 		// Time comparison
@@ -43,8 +42,6 @@ func GetTimeFunctions() map[string]function.Function {
 		"durationtruncate": DurationTruncateFunc,
 		"durationround":    DurationRoundFunc,
 		"absduration":      AbsDurationFunc,
-		// Duration decomposition
-		"durationpart": DurationPartFunc,
 		// Duration comparison
 		"durationlt": DurationLtFunc,
 		"durationgt": DurationGtFunc,

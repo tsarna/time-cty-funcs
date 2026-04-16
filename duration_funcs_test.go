@@ -113,43 +113,6 @@ func TestFormatDurationInvalidFormat(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// --- durationpart ---
-
-func TestDurationPart(t *testing.T) {
-	base := 90*time.Minute + 30*time.Second + 500*time.Millisecond
-	d := NewDurationCapsule(base)
-
-	floatCases := []struct {
-		unit string
-		want float64
-	}{
-		{"h", base.Hours()},
-		{"m", base.Minutes()},
-		{"s", base.Seconds()},
-	}
-	for _, tt := range floatCases {
-		result, err := DurationPartFunc.Call([]cty.Value{d, cty.StringVal(tt.unit)})
-		require.NoError(t, err, "durationpart(d, %q)", tt.unit)
-		got, _ := result.AsBigFloat().Float64()
-		assert.InDelta(t, tt.want, got, 1e-9, "durationpart(d, %q)", tt.unit)
-	}
-
-	intCases := []struct {
-		unit string
-		want int64
-	}{
-		{"ms", base.Milliseconds()},
-		{"us", base.Microseconds()},
-		{"ns", base.Nanoseconds()},
-	}
-	for _, tt := range intCases {
-		result, err := DurationPartFunc.Call([]cty.Value{d, cty.StringVal(tt.unit)})
-		require.NoError(t, err, "durationpart(d, %q)", tt.unit)
-		got, _ := result.AsBigFloat().Int64()
-		assert.Equal(t, tt.want, got, "durationpart(d, %q)", tt.unit)
-	}
-}
-
 // --- absduration ---
 
 func TestAbsDurationPositive(t *testing.T) {

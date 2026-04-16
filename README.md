@@ -16,7 +16,7 @@ A cty capsule type wrapping Go's `time.Time`. Supports equality (`==`, `!=`) via
 
 ### `timecty.DurationCapsuleType`
 
-A cty capsule type wrapping Go's `time.Duration` (int64 nanoseconds; range ±~292 years). Supports equality (`==`, `!=`) via `CapsuleOps`.
+A cty capsule type wrapping Go's `time.Duration` (int64 nanoseconds; range ±~292 years). Supports equality (`==`, `!=`) via `CapsuleOps`. Use `durationlt`/`durationgt` (or extract via `get(d, unit)` and compare numerically) for ordering.
 
 **Limitation:** Go's `time.Duration` cannot represent calendar months or years exactly. ISO 8601 durations like `P1Y` or `P1M` are rejected; use `addyears()` / `addmonths()` instead.
 
@@ -40,7 +40,32 @@ for name, fn := range timecty.GetTimeFunctions() {
 }
 ```
 
-`GetTimeFunctions()` returns all 32 functions described below. The `timeadd` entry supersedes the go-cty stdlib version, adding capsule-type support while remaining backward-compatible with the `(string, string) → string` form.
+`GetTimeFunctions()` returns the functions described below. The `timeadd` entry supersedes the go-cty stdlib version, adding capsule-type support while remaining backward-compatible with the `(string, string) → string` form.
+
+### rich-cty-types integration
+
+The `time` and `duration` capsule types implement the [rich-cty-types](https://github.com/tsarna/rich-cty-types) `Stringable` and `Gettable` interfaces. To expose the generic `tostring` and `get` functions in your eval context, merge them in:
+
+```go
+import (
+    timecty "github.com/tsarna/time-cty-funcs"
+    richcty "github.com/tsarna/rich-cty-types"
+)
+
+funcs := richcty.GetGenericFunctions()       // tostring, get, length, ...
+for name, fn := range timecty.GetTimeFunctions() {
+    funcs[name] = fn
+}
+```
+
+With these registered:
+
+- `tostring(t)` formats a `time` as RFC 3339 with nanosecond precision (equivalent to `formattime("@rfc3339nano", t)`).
+- `tostring(d)` formats a `duration` using Go syntax (equivalent to `formatduration(d)`).
+- `get(t, part)` extracts a calendar field from a `time`. Valid `part` values: `"year"`, `"month"`, `"day"`, `"hour"`, `"minute"`, `"second"`, `"nanosecond"`, `"weekday"` (0=Sunday), `"yearday"`, `"isoweek"`, `"isoyear"`.
+- `get(d, unit)` extracts a `duration` in the given unit. `"h"`, `"m"`, `"s"` return floats; `"ms"`, `"us"`, `"ns"` return integers.
+
+The part/unit accessors are available **only** through `get()`; the previous `timepart()` and `durationpart()` functions have been removed.
 
 ## String Formats
 
@@ -126,12 +151,11 @@ PT0.5S         # 500 milliseconds
 |----------|-----------|-------------|
 | `unix(t)` | `(time) → number` | Unix epoch as fractional seconds |
 | `unix(t, unit)` | `(time, string) → number` | Unix epoch in unit: `"s"` (float), `"ms"`, `"us"`, `"ns"` (integers) |
-| `timepart(t, part)` | `(time, string) → number` | Extract calendar field (see below) |
 | `timezone()` | `() → string` | System local timezone name |
 | `timezone(t)` | `(time) → string` | Stored timezone name |
 | `intimezone(t, tz)` | `(time, string) → time` | Re-express `t` in given IANA timezone |
 
-Valid `part` values for `timepart`: `"year"`, `"month"`, `"day"`, `"hour"`, `"minute"`, `"second"`, `"nanosecond"`, `"weekday"` (0=Sunday), `"yearday"`, `"isoweek"`, `"isoyear"`.
+Calendar fields (`year`, `month`, `day`, `hour`, `minute`, `second`, `nanosecond`, `weekday`, `yearday`, `isoweek`, `isoyear`) are extracted via the rich-cty-types generic `get(t, part)` function — see [rich-cty-types integration](#rich-cty-types-integration).
 
 ### Timestamp — Comparison
 
@@ -156,11 +180,12 @@ go-cty v1.18 does not support ordering operators for capsule types. Use these fu
 | `formatduration(d)` | `(duration) → string` | Go format (e.g. `"1h30m5s"`) |
 | `formatduration(d, fmt)` | `(duration, string) → string` | `fmt` is `"go"` (default) or `"iso"` (ISO 8601 P-notation) |
 
-### Duration — Decomposition & Arithmetic
+### Duration — Arithmetic
+
+Duration in a given unit is extracted via the rich-cty-types generic `get(d, unit)` function — see [rich-cty-types integration](#rich-cty-types-integration).
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `durationpart(d, unit)` | `(duration, string) → number` | Duration in given unit; `"h"/"m"/"s"` → float, others → integer |
 | `absduration(d)` | `(duration) → duration` | Absolute value |
 | `durationadd(d1, d2)` | `(duration, duration) → duration` | Sum |
 | `durationsub(d1, d2)` | `(duration, duration) → duration` | Difference |
@@ -205,13 +230,18 @@ timesub(deadline, duration(30, "m"))      # → time
 
 # Duration
 since(start_time)
-durationpart(since(start_time), "s")      # float seconds
+get(since(start_time), "s")               # float seconds (requires rich-cty-types)
 formatduration(since(start_time))         # "5m32s"
 formatduration(since(start_time), "iso")  # "PT5M32S"
+tostring(since(start_time))               # "5m32s" (requires rich-cty-types)
 
 # Comparison
 durationgt(since(last_seen), duration(24, "h"))
 timebefore(expires_at, now("UTC"))
+
+# Calendar field extraction (requires rich-cty-types)
+get(now("UTC"), "year")                   # 2024
+get(now("UTC"), "weekday")                # 0=Sun ... 6=Sat
 
 # Unix interop
 fromunix(epoch_seconds)

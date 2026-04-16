@@ -80,38 +80,6 @@ var FormatDurationFunc = function.New(&function.Spec{
 	},
 })
 
-// DurationPartFunc extracts a duration expressed in the given unit.
-// "h", "m", "s" return floats; "ms", "us", "ns" return integers.
-var DurationPartFunc = function.New(&function.Spec{
-	Params: []function.Parameter{
-		{Name: "d", Type: DurationCapsuleType},
-		{Name: "unit", Type: cty.String},
-	},
-	Type: function.StaticReturnType(cty.Number),
-	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
-		d, err := GetDuration(args[0])
-		if err != nil {
-			return cty.NilVal, err
-		}
-		switch args[1].AsString() {
-		case "h":
-			return cty.NumberFloatVal(d.Hours()), nil
-		case "m":
-			return cty.NumberFloatVal(d.Minutes()), nil
-		case "s":
-			return cty.NumberFloatVal(d.Seconds()), nil
-		case "ms":
-			return cty.NumberIntVal(d.Milliseconds()), nil
-		case "us":
-			return cty.NumberIntVal(d.Microseconds()), nil
-		case "ns":
-			return cty.NumberIntVal(d.Nanoseconds()), nil
-		default:
-			return cty.NilVal, fmt.Errorf("durationpart: unknown unit %q; valid units: h, m, s, ms, us, ns", args[1].AsString())
-		}
-	},
-})
-
 // AbsDurationFunc returns the absolute value of a duration.
 var AbsDurationFunc = function.New(&function.Spec{
 	Params: []function.Parameter{

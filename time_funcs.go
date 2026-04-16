@@ -400,53 +400,6 @@ var UnixFunc = function.New(&function.Spec{
 	},
 })
 
-// --- Decomposition ---
-
-// TimePartFunc extracts a named calendar field from a time value in its stored timezone.
-// Called as timepart(t, "year"), timepart(t, "month"), etc.
-// Valid parts: year, month, day, hour, minute, second, nanosecond, weekday, yearday, isoweek, isoyear.
-var TimePartFunc = function.New(&function.Spec{
-	Params: []function.Parameter{
-		{Name: "t", Type: TimeCapsuleType},
-		{Name: "part", Type: cty.String},
-	},
-	Type: function.StaticReturnType(cty.Number),
-	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
-		t, err := GetTime(args[0])
-		if err != nil {
-			return cty.NilVal, err
-		}
-		switch args[1].AsString() {
-		case "year":
-			return cty.NumberIntVal(int64(t.Year())), nil
-		case "month":
-			return cty.NumberIntVal(int64(t.Month())), nil
-		case "day":
-			return cty.NumberIntVal(int64(t.Day())), nil
-		case "hour":
-			return cty.NumberIntVal(int64(t.Hour())), nil
-		case "minute":
-			return cty.NumberIntVal(int64(t.Minute())), nil
-		case "second":
-			return cty.NumberIntVal(int64(t.Second())), nil
-		case "nanosecond":
-			return cty.NumberIntVal(int64(t.Nanosecond())), nil
-		case "weekday":
-			return cty.NumberIntVal(int64(t.Weekday())), nil
-		case "yearday":
-			return cty.NumberIntVal(int64(t.YearDay())), nil
-		case "isoweek":
-			_, week := t.ISOWeek()
-			return cty.NumberIntVal(int64(week)), nil
-		case "isoyear":
-			year, _ := t.ISOWeek()
-			return cty.NumberIntVal(int64(year)), nil
-		default:
-			return cty.NilVal, fmt.Errorf("timepart: unknown part %q; valid parts: year, month, day, hour, minute, second, nanosecond, weekday, yearday, isoweek, isoyear", args[1].AsString())
-		}
-	},
-})
-
 // --- Timezone ---
 
 // TimezoneFunc returns the timezone name.
