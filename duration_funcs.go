@@ -11,12 +11,21 @@ import (
 // DurationFunc creates a duration from a string or from a number and unit.
 // Called as duration("5m"), duration("PT5M"), or duration(5, "m").
 var DurationFunc = function.New(&function.Spec{
+	Description: `A duration, from a string ("1h30m" or ISO 8601 "PT1H30M") or from a number and a unit. The first argument's type therefore decides how many arguments there are, which is why externs.cty declares this as two forms.`,
 	Params: []function.Parameter{
-		{Name: "val", Type: cty.DynamicPseudoType},
+		{
+			// A union (string | number), which cty cannot say; the Type func decides.
+			Name:        "val",
+			Type:        cty.DynamicPseudoType,
+			Description: "A duration string, or the number of `unit`s.",
+		},
 	},
+	// Present only in the (number, unit) form, so cty forces a variadic; but it is a
+	// string, and now says so.
 	VarParam: &function.Parameter{
-		Name: "unit",
-		Type: cty.DynamicPseudoType,
+		Name:        "unit",
+		Type:        cty.String,
+		Description: `One of "h", "m", "s", "ms", "us", "ns". Required when val is a number; not allowed when it is a string.`,
 	},
 	Type: func(args []cty.Value) (cty.Type, error) {
 		switch len(args) {
@@ -52,14 +61,21 @@ var DurationFunc = function.New(&function.Spec{
 // FormatDurationFunc formats a duration as a string.
 // Called as formatduration(d) for Go format (default) or formatduration(d, "iso") for ISO 8601.
 var FormatDurationFunc = function.New(&function.Spec{
+	Description: "Render a duration.",
 	Params: []function.Parameter{
-		{Name: "d", Type: DurationCapsuleType},
+		{
+			Name:        "d",
+			Type:        DurationCapsuleType,
+			Description: "The duration to render.",
+		},
 	},
+	// Optional, defaulting to "go" — which cty cannot say. See externs.cty.
 	VarParam: &function.Parameter{
-		Name: "fmt",
-		Type: cty.String,
+		Name:        "fmt",
+		Type:        cty.String,
+		Description: `"go" ("1h30m0s") or "iso" ("PT1H30M"); defaults to "go".`,
 	},
-	Type: function.StaticReturnType(cty.String),
+	Type: boundedArity("formatduration", 2, cty.String),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
 		d, err := GetDuration(args[0])
 		if err != nil {
@@ -82,8 +98,13 @@ var FormatDurationFunc = function.New(&function.Spec{
 
 // AbsDurationFunc returns the absolute value of a duration.
 var AbsDurationFunc = function.New(&function.Spec{
+	Description: "A duration's magnitude, discarding its sign.",
 	Params: []function.Parameter{
-		{Name: "d", Type: DurationCapsuleType},
+		{
+			Name:        "d",
+			Type:        DurationCapsuleType,
+			Description: "The duration.",
+		},
 	},
 	Type: function.StaticReturnType(DurationCapsuleType),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
@@ -102,9 +123,18 @@ var AbsDurationFunc = function.New(&function.Spec{
 
 // DurationAddFunc adds two durations: d1 + d2
 var DurationAddFunc = function.New(&function.Spec{
+	Description: "The sum of two durations.",
 	Params: []function.Parameter{
-		{Name: "d1", Type: DurationCapsuleType},
-		{Name: "d2", Type: DurationCapsuleType},
+		{
+			Name:        "d1",
+			Type:        DurationCapsuleType,
+			Description: "The first duration.",
+		},
+		{
+			Name:        "d2",
+			Type:        DurationCapsuleType,
+			Description: "The duration to add.",
+		},
 	},
 	Type: function.StaticReturnType(DurationCapsuleType),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
@@ -116,9 +146,18 @@ var DurationAddFunc = function.New(&function.Spec{
 
 // DurationSubFunc subtracts durations: d1 - d2
 var DurationSubFunc = function.New(&function.Spec{
+	Description: "The difference between two durations. Negative if d2 is the longer.",
 	Params: []function.Parameter{
-		{Name: "d1", Type: DurationCapsuleType},
-		{Name: "d2", Type: DurationCapsuleType},
+		{
+			Name:        "d1",
+			Type:        DurationCapsuleType,
+			Description: "The duration to subtract from.",
+		},
+		{
+			Name:        "d2",
+			Type:        DurationCapsuleType,
+			Description: "The duration to subtract.",
+		},
 	},
 	Type: function.StaticReturnType(DurationCapsuleType),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
@@ -130,9 +169,18 @@ var DurationSubFunc = function.New(&function.Spec{
 
 // DurationMulFunc multiplies a duration by a scalar: d * n
 var DurationMulFunc = function.New(&function.Spec{
+	Description: "A duration scaled by a factor.",
 	Params: []function.Parameter{
-		{Name: "d", Type: DurationCapsuleType},
-		{Name: "n", Type: cty.Number},
+		{
+			Name:        "d",
+			Type:        DurationCapsuleType,
+			Description: "The duration to scale.",
+		},
+		{
+			Name:        "n",
+			Type:        cty.Number,
+			Description: "The factor; may be fractional.",
+		},
 	},
 	Type: function.StaticReturnType(DurationCapsuleType),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
@@ -144,9 +192,18 @@ var DurationMulFunc = function.New(&function.Spec{
 
 // DurationDivFunc divides a duration by a scalar: d / n (returns duration)
 var DurationDivFunc = function.New(&function.Spec{
+	Description: "A duration divided by a divisor. Dividing by zero is an error.",
 	Params: []function.Parameter{
-		{Name: "d", Type: DurationCapsuleType},
-		{Name: "n", Type: cty.Number},
+		{
+			Name:        "d",
+			Type:        DurationCapsuleType,
+			Description: "The duration to divide.",
+		},
+		{
+			Name:        "n",
+			Type:        cty.Number,
+			Description: "The divisor; may be fractional.",
+		},
 	},
 	Type: function.StaticReturnType(DurationCapsuleType),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
@@ -161,9 +218,18 @@ var DurationDivFunc = function.New(&function.Spec{
 
 // DurationTruncateFunc truncates d to a multiple of m: d.Truncate(m)
 var DurationTruncateFunc = function.New(&function.Spec{
+	Description: "A duration rounded down to a multiple of m.",
 	Params: []function.Parameter{
-		{Name: "d", Type: DurationCapsuleType},
-		{Name: "m", Type: DurationCapsuleType},
+		{
+			Name:        "d",
+			Type:        DurationCapsuleType,
+			Description: "The duration to truncate.",
+		},
+		{
+			Name:        "m",
+			Type:        DurationCapsuleType,
+			Description: "The multiple to truncate to — itself a duration, e.g. duration(\"1m\").",
+		},
 	},
 	Type: function.StaticReturnType(DurationCapsuleType),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
@@ -175,9 +241,18 @@ var DurationTruncateFunc = function.New(&function.Spec{
 
 // DurationRoundFunc rounds d to the nearest multiple of m: d.Round(m)
 var DurationRoundFunc = function.New(&function.Spec{
+	Description: "A duration rounded to the nearest multiple of m, halves away from zero.",
 	Params: []function.Parameter{
-		{Name: "d", Type: DurationCapsuleType},
-		{Name: "m", Type: DurationCapsuleType},
+		{
+			Name:        "d",
+			Type:        DurationCapsuleType,
+			Description: "The duration to round.",
+		},
+		{
+			Name:        "m",
+			Type:        DurationCapsuleType,
+			Description: "The multiple to round to — itself a duration, e.g. duration(\"1m\").",
+		},
 	},
 	Type: function.StaticReturnType(DurationCapsuleType),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
@@ -191,9 +266,18 @@ var DurationRoundFunc = function.New(&function.Spec{
 
 // DurationLtFunc returns true if d1 < d2.
 var DurationLtFunc = function.New(&function.Spec{
+	Description: "Whether d1 is shorter than d2. Signed: -1h is less than 1s.",
 	Params: []function.Parameter{
-		{Name: "d1", Type: DurationCapsuleType},
-		{Name: "d2", Type: DurationCapsuleType},
+		{
+			Name:        "d1",
+			Type:        DurationCapsuleType,
+			Description: "The duration to test.",
+		},
+		{
+			Name:        "d2",
+			Type:        DurationCapsuleType,
+			Description: "The duration to compare against.",
+		},
 	},
 	Type: function.StaticReturnType(cty.Bool),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
@@ -211,9 +295,18 @@ var DurationLtFunc = function.New(&function.Spec{
 
 // DurationGtFunc returns true if d1 > d2.
 var DurationGtFunc = function.New(&function.Spec{
+	Description: "Whether d1 is longer than d2. Signed: 1s is greater than -1h.",
 	Params: []function.Parameter{
-		{Name: "d1", Type: DurationCapsuleType},
-		{Name: "d2", Type: DurationCapsuleType},
+		{
+			Name:        "d1",
+			Type:        DurationCapsuleType,
+			Description: "The duration to test.",
+		},
+		{
+			Name:        "d2",
+			Type:        DurationCapsuleType,
+			Description: "The duration to compare against.",
+		},
 	},
 	Type: function.StaticReturnType(cty.Bool),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {

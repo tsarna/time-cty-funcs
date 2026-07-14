@@ -17,12 +17,21 @@ import (
 //
 // Computes x = first serial of the day for t (YYYYMMDD * 100), then returns max(s+1, x).
 var NextZoneSerialFunc = function.New(&function.Spec{
+	Description: "The next DNS zone serial: whichever is greater of s + 1 and today's date in the conventional YYYYMMDDNN form, so that the serial always advances.",
 	Params: []function.Parameter{
-		{Name: "s", Type: cty.DynamicPseudoType},
+		{
+			// A union (number | string), which cty cannot say; the Type func decides.
+			Name:        "s",
+			Type:        cty.DynamicPseudoType,
+			Description: "The current serial, as a number or a string.",
+		},
 	},
+	// Optional, defaulting to now() — which cty cannot say. It is a time, and now
+	// says so. See externs.cty.
 	VarParam: &function.Parameter{
-		Name: "t",
-		Type: cty.DynamicPseudoType,
+		Name:        "t",
+		Type:        TimeCapsuleType,
+		Description: "The date to advance to; defaults to now().",
 	},
 	Type: func(args []cty.Value) (cty.Type, error) {
 		if len(args) > 2 {
@@ -31,12 +40,6 @@ var NextZoneSerialFunc = function.New(&function.Spec{
 		t0 := args[0].Type()
 		if t0 != cty.Number && t0 != cty.String && t0 != cty.DynamicPseudoType {
 			return cty.NilType, fmt.Errorf("nextzoneserial: serial must be a number or string, got %s", t0.FriendlyName())
-		}
-		if len(args) == 2 {
-			t1 := args[1].Type()
-			if t1 != TimeCapsuleType && t1 != cty.DynamicPseudoType {
-				return cty.NilType, fmt.Errorf("nextzoneserial: second argument must be a time value, got %s", t1.FriendlyName())
-			}
 		}
 		return cty.Number, nil
 	},
@@ -65,8 +68,14 @@ var NextZoneSerialFunc = function.New(&function.Spec{
 // For out-of-range date components, the nearest valid date is used:
 // month > 12 → December 31; day > days in month → last day of month.
 var ParseZoneSerialFunc = function.New(&function.Spec{
+	Description: "The date a DNS zone serial in YYYYMMDDNN form encodes, as a UTC midnight time. The NN revision suffix is discarded; an out-of-range month or day is snapped to the nearest valid date.",
 	Params: []function.Parameter{
-		{Name: "s", Type: cty.DynamicPseudoType},
+		{
+			// A union (number | string), which cty cannot say; the Type func decides.
+			Name:        "s",
+			Type:        cty.DynamicPseudoType,
+			Description: "The serial to decode, as a number or a string.",
+		},
 	},
 	Type: func(args []cty.Value) (cty.Type, error) {
 		t := args[0].Type()

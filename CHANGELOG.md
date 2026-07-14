@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`Externs()` — the real signatures of the functions cty cannot describe, for functy
+  hosts.** `externs.cty` (embedded; exposed as opaque bytes via `Externs()` and
+  `ExternsFilename`) declares 12 of the 31 functions this package provides. This package
+  does **not** import functy — the bytes are opaque here, and `embed` is stdlib. A functy
+  host registers them with `parser.RegisterExterns(timecty.Externs(), timecty.ExternsFilename)`.
+
+  Two kinds of function are misrepresented by their own cty metadata:
+
+  - **Faked optionals.** cty can only make a function's *trailing* parameters optional, so
+    an optional argument has to be a variadic — which erases its name, its type, and its
+    default. `fromunix(n, unit = "s")` reflects as `fromunix(n, ...args)`. Declared:
+    `now`, `strptime`, `fromunix`, `unix`, `timezone`, `formatduration`, `nextzoneserial`.
+  - **Genuine overloads.** A cty function has one signature. `parsetime(s)` reads a
+    timestamp while `parsetime(format, s)` reads a *format* and then a timestamp;
+    `duration` takes a string *or* a number and a unit; and `timeadd`/`timesub` have a
+    **return type that depends on their arguments** — something cty cannot express even in
+    principle. Each is declared as a set of forms, one per shape, each with its own return
+    type.
+
+  The other 19 functions are deliberately **not** declared: their cty metadata is complete
+  (fixed arity, concrete parameter types, a static return type), so an extern would only be
+  a second place for the same facts to drift. A test enforces the split in both directions.
+
+### Changed
+
+- **Every function now carries a cty `Description`, and every function without an extern
+  documents its parameters.** Previously there was not one `Description` in the package —
+  so any reflection over the cty metadata reported functions that exist but are
+  undocumented.
+- **Parameter types are declared honestly where cty allows it.** `timezone`'s and
+  `nextzoneserial`'s optional time, `duration`'s unit, and `timesub`'s first argument were
+  all declared `DynamicPseudoType` and then type-checked by hand inside the `Type` func;
+  they now say what they accept, and cty rejects the rest. The parameters that remain
+  dynamic are the genuine unions (`timesub`'s second argument, `duration`'s first, the DNS
+  serial) — cty has no union type, which is why those functions are declared in
+  `externs.cty` as one form per type.
+
+### Fixed
+
+- **Surplus arguments are now rejected.** A cty `VarParam` has no upper bound of its own,
+  so `now`, `fromunix`, `unix` and `formatduration` — which use one to fake an *optional*
+  argument — accepted any number of trailing arguments and silently dropped them:
+  `now("UTC", "junk")` returned a time, and `fromunix(0, "s", "x")` succeeded. Each now
+  declares its ceiling, as `parsetime`, `strptime`, `timezone` and `duration` already did.
+
+  This rejects calls that previously "worked", but only ones that were already nonsense —
+  the surplus arguments never had any effect.
+
 ## [0.2.0] - 2026-04-16
 
 ### Added

@@ -11,12 +11,17 @@ import (
 
 // NowFunc returns the current time, optionally in the given IANA timezone.
 // Called as now() or now("America/New_York").
+//
+// The optional tz is a VarParam because cty has no other way to spell an optional
+// argument — see externs.cty, which declares the signature this cannot.
 var NowFunc = function.New(&function.Spec{
+	Description: "The current time. Without a zone, in the machine's local zone.",
 	VarParam: &function.Parameter{
-		Name: "tz",
-		Type: cty.String,
+		Name:        "tz",
+		Type:        cty.String,
+		Description: `IANA zone name, e.g. "America/New_York".`,
 	},
-	Type: function.StaticReturnType(TimeCapsuleType),
+	Type: boundedArity("now", 1, TimeCapsuleType),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
 		if len(args) == 0 {
 			return NewTimeCapsule(time.Now()), nil
@@ -38,7 +43,14 @@ var NowFunc = function.New(&function.Spec{
 //	parsetime(format, s)      — parse s using Go layout (or @name alias)
 //	parsetime(format, s, tz)  — same, but interpret s in the given IANA timezone
 var ParseTimeFunc = function.New(&function.Spec{
-	VarParam: &function.Parameter{Name: "args", Type: cty.String},
+	Description: "Parse a timestamp. With one argument it reads RFC 3339; with two, the first is a Go reference layout or an @alias; a third interprets the parsed wall-clock in that zone. The meaning of the first argument therefore depends on how many there are, which is why externs.cty declares this as three forms.",
+	// Every argument is in the variadic, because there is no other way to say that
+	// arg 0 means something different depending on how many there are.
+	VarParam: &function.Parameter{
+		Name:        "args",
+		Type:        cty.String,
+		Description: "The timestamp; or a format and then the timestamp; or a format, the timestamp, and an IANA zone.",
+	},
 	Type: func(args []cty.Value) (cty.Type, error) {
 		if len(args) < 1 || len(args) > 3 {
 			return cty.NilType, fmt.Errorf("parsetime() takes 1 to 3 arguments")
@@ -94,9 +106,18 @@ var ParseTimeFunc = function.New(&function.Spec{
 //	timeadd(time, string)   → time     (string auto-parsed as duration)
 //	timeadd(string, duration) → time   (string auto-parsed as RFC 3339)
 var TimeAddFunc = function.New(&function.Spec{
+	Description: "Add a duration to a time. The (string, string) form is the stdlib-compatible one and returns a string; the others return a time. The return type therefore depends on the arguments, which is why externs.cty declares this as four forms.",
 	Params: []function.Parameter{
-		{Name: "ts", Type: cty.DynamicPseudoType},
-		{Name: "dur", Type: cty.DynamicPseudoType},
+		{
+			Name:        "ts",
+			Type:        cty.DynamicPseudoType,
+			Description: "The time to add to: a time, or an RFC 3339 string.",
+		},
+		{
+			Name:        "dur",
+			Type:        cty.DynamicPseudoType,
+			Description: "The duration to add: a duration, or a string. Go syntax always works; ISO 8601 works except in the (string, string) form.",
+		},
 	},
 	Type: func(args []cty.Value) (cty.Type, error) {
 		t0, t1 := args[0].Type(), args[1].Type()
@@ -182,17 +203,26 @@ var TimeAddFunc = function.New(&function.Spec{
 //	timesub(time, time)     → duration   (elapsed from t2 to t1; negative if t1 < t2)
 //	timesub(time, duration) → time       (time minus duration)
 var TimeSubFunc = function.New(&function.Spec{
+	Description: "Subtract from a time: another time, giving the duration between them (negative if t2 is later), or a duration, giving the earlier time. The return type therefore depends on the arguments, which is why externs.cty declares this as two forms.",
 	Params: []function.Parameter{
-		{Name: "t1", Type: cty.DynamicPseudoType},
-		{Name: "t2", Type: cty.DynamicPseudoType},
+		{
+			Name:        "t1",
+			Type:        TimeCapsuleType,
+			Description: "The time to subtract from.",
+		},
+		{
+			// Genuinely a union (time | duration) and therefore not sayable in cty,
+			// which has no union type — the Type func below decides. externs.cty
+			// declares the two forms.
+			Name:        "t2",
+			Type:        cty.DynamicPseudoType,
+			Description: "A time (giving the duration between) or a duration (giving the earlier time).",
+		},
 	},
 	Type: func(args []cty.Value) (cty.Type, error) {
-		t0, t1 := args[0].Type(), args[1].Type()
-		if t0 == cty.DynamicPseudoType || t1 == cty.DynamicPseudoType {
+		t1 := args[1].Type()
+		if t1 == cty.DynamicPseudoType {
 			return cty.DynamicPseudoType, nil
-		}
-		if t0 != TimeCapsuleType {
-			return cty.NilType, fmt.Errorf("timesub: first argument must be a time, got %s", t0.FriendlyName())
 		}
 		switch t1 {
 		case TimeCapsuleType:
@@ -229,8 +259,13 @@ var TimeSubFunc = function.New(&function.Spec{
 
 // SinceFunc returns the duration elapsed since the given time (equivalent to timesub(now(), t)).
 var SinceFunc = function.New(&function.Spec{
+	Description: "How long ago a time was: the duration from it until now. Negative if it is in the future.",
 	Params: []function.Parameter{
-		{Name: "t", Type: TimeCapsuleType},
+		{
+			Name:        "t",
+			Type:        TimeCapsuleType,
+			Description: "The time to measure from.",
+		},
 	},
 	Type: function.StaticReturnType(DurationCapsuleType),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
@@ -244,8 +279,13 @@ var SinceFunc = function.New(&function.Spec{
 
 // UntilFunc returns the duration until the given time (equivalent to timesub(t, now())).
 var UntilFunc = function.New(&function.Spec{
+	Description: "How far off a time is: the duration from now until it. Negative if it has passed.",
 	Params: []function.Parameter{
-		{Name: "t", Type: TimeCapsuleType},
+		{
+			Name:        "t",
+			Type:        TimeCapsuleType,
+			Description: "The time to measure to.",
+		},
 	},
 	Type: function.StaticReturnType(DurationCapsuleType),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
@@ -260,9 +300,18 @@ var UntilFunc = function.New(&function.Spec{
 // FormatTimeFunc formats a time value using Go's reference-time format or a @name alias.
 // Called as formattime("2006-01-02", t) or formattime("@rfc3339", t).
 var FormatTimeFunc = function.New(&function.Spec{
+	Description: "Render a time with a Go reference layout.",
 	Params: []function.Parameter{
-		{Name: "format", Type: cty.String},
-		{Name: "t", Type: TimeCapsuleType},
+		{
+			Name:        "format",
+			Type:        cty.String,
+			Description: "A Go reference layout (\"2006-01-02\"), or an @alias such as @rfc3339.",
+		},
+		{
+			Name:        "t",
+			Type:        TimeCapsuleType,
+			Description: "The time to render.",
+		},
 	},
 	Type: function.StaticReturnType(cty.String),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
@@ -281,9 +330,18 @@ var FormatTimeFunc = function.New(&function.Spec{
 // StrftimeFunc formats a time using a strftime-style format string (via itchyny/timefmt-go).
 // Called as strftime("%Y-%m-%d", t).
 var StrftimeFunc = function.New(&function.Spec{
+	Description: "Render a time with a C-style strftime format. Unlike formattime, @aliases are not resolved here.",
 	Params: []function.Parameter{
-		{Name: "format", Type: cty.String},
-		{Name: "t", Type: TimeCapsuleType},
+		{
+			Name:        "format",
+			Type:        cty.String,
+			Description: "A strftime-style layout, e.g. \"%Y-%m-%d\".",
+		},
+		{
+			Name:        "t",
+			Type:        TimeCapsuleType,
+			Description: "The time to render.",
+		},
 	},
 	Type: function.StaticReturnType(cty.String),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
@@ -298,11 +356,25 @@ var StrftimeFunc = function.New(&function.Spec{
 // StrptimeFunc parses a time string using a strftime-style format (via itchyny/timefmt-go).
 // Called as strptime("%Y-%m-%d", "2024-01-15") or strptime("%Y-%m-%d", "2024-01-15", "UTC").
 var StrptimeFunc = function.New(&function.Spec{
+	Description: "Parse a timestamp with a C-style strftime format. Unlike parsetime and formattime, @aliases are not resolved here.",
 	Params: []function.Parameter{
-		{Name: "format", Type: cty.String},
-		{Name: "s", Type: cty.String},
+		{
+			Name:        "format",
+			Type:        cty.String,
+			Description: "strftime-style layout, e.g. \"%Y-%m-%d\".",
+		},
+		{
+			Name:        "s",
+			Type:        cty.String,
+			Description: "The timestamp to parse.",
+		},
 	},
-	VarParam: &function.Parameter{Name: "tz", Type: cty.String},
+	// Optional — hence a variadic, which is all cty offers. See externs.cty.
+	VarParam: &function.Parameter{
+		Name:        "tz",
+		Type:        cty.String,
+		Description: "IANA zone; the parsed wall-clock is read as being in it. Optional.",
+	},
 	Type: func(args []cty.Value) (cty.Type, error) {
 		if len(args) > 3 {
 			return cty.NilType, fmt.Errorf("strptime() takes 2 or 3 arguments")
@@ -333,14 +405,22 @@ var StrptimeFunc = function.New(&function.Spec{
 // Called as fromunix(n) for seconds (possibly fractional), or fromunix(n, unit)
 // where unit is "s", "ms", "us", or "ns". Always returns UTC.
 var FromUnixFunc = function.New(&function.Spec{
+	Description: "A time from a Unix epoch count. Always returns a UTC time.",
 	Params: []function.Parameter{
-		{Name: "n", Type: cty.Number},
+		{
+			Name:        "n",
+			Type:        cty.Number,
+			Description: "The epoch count; fractional seconds are honored.",
+		},
 	},
+	// The unit is optional and defaults to "s" — which cty cannot say, so it is faked
+	// with a variadic. externs.cty declares the real signature.
 	VarParam: &function.Parameter{
-		Name: "unit",
-		Type: cty.String,
+		Name:        "unit",
+		Type:        cty.String,
+		Description: `One of "s", "ms", "us", "ns"; defaults to "s".`,
 	},
-	Type: function.StaticReturnType(TimeCapsuleType),
+	Type: boundedArity("fromunix", 2, TimeCapsuleType),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
 		unit := "s"
 		if len(args) > 1 {
@@ -368,14 +448,21 @@ var FromUnixFunc = function.New(&function.Spec{
 // Called as unix(t) for fractional seconds, or unix(t, unit) where unit is
 // "s" (float), "ms", "us", or "ns" (integers).
 var UnixFunc = function.New(&function.Spec{
+	Description: "A time as a Unix epoch count. Seconds are fractional; the other units are whole.",
 	Params: []function.Parameter{
-		{Name: "t", Type: TimeCapsuleType},
+		{
+			Name:        "t",
+			Type:        TimeCapsuleType,
+			Description: "The time to convert.",
+		},
 	},
+	// Optional, defaulting to "s"; see FromUnixFunc.
 	VarParam: &function.Parameter{
-		Name: "unit",
-		Type: cty.String,
+		Name:        "unit",
+		Type:        cty.String,
+		Description: `One of "s", "ms", "us", "ns"; defaults to "s".`,
 	},
-	Type: function.StaticReturnType(cty.Number),
+	Type: boundedArity("unix", 2, cty.Number),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
 		t, err := GetTime(args[0])
 		if err != nil {
@@ -406,22 +493,15 @@ var UnixFunc = function.New(&function.Spec{
 // Called as timezone() for the local system timezone, or timezone(t) for the
 // timezone stored in a time value.
 var TimezoneFunc = function.New(&function.Spec{
+	Description: "A time's zone name. Without an argument, the machine's local zone.",
+	// Optional, so cty forces a variadic; but it is a time, and now says so — cty
+	// itself rejects anything else, where a hand-rolled check in the Type func used to.
 	VarParam: &function.Parameter{
-		Name: "t",
-		Type: cty.DynamicPseudoType,
+		Name:        "t",
+		Type:        TimeCapsuleType,
+		Description: "The time whose zone to report; omit for the local zone.",
 	},
-	Type: func(args []cty.Value) (cty.Type, error) {
-		if len(args) > 1 {
-			return cty.NilType, fmt.Errorf("timezone() takes 0 or 1 arguments")
-		}
-		if len(args) == 1 {
-			t := args[0].Type()
-			if t != TimeCapsuleType && t != cty.DynamicPseudoType {
-				return cty.NilType, fmt.Errorf("timezone: argument must be a time value, got %s", t.FriendlyName())
-			}
-		}
-		return cty.String, nil
-	},
+	Type: boundedArity("timezone", 1, cty.String),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
 		if len(args) == 0 {
 			return cty.StringVal(time.Local.String()), nil
@@ -437,9 +517,18 @@ var TimezoneFunc = function.New(&function.Spec{
 // InTimezoneFunc re-expresses a time in a different IANA timezone.
 // The instant is unchanged; only the displayed timezone changes.
 var InTimezoneFunc = function.New(&function.Spec{
+	Description: "The same instant, displayed in another zone.",
 	Params: []function.Parameter{
-		{Name: "t", Type: TimeCapsuleType},
-		{Name: "tz", Type: cty.String},
+		{
+			Name:        "t",
+			Type:        TimeCapsuleType,
+			Description: "The time to convert.",
+		},
+		{
+			Name:        "tz",
+			Type:        cty.String,
+			Description: "IANA zone name, e.g. \"America/New_York\".",
+		},
 	},
 	Type: function.StaticReturnType(TimeCapsuleType),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
@@ -459,9 +548,18 @@ var InTimezoneFunc = function.New(&function.Spec{
 
 // AddYearsFunc adds n calendar years to a time (calls time.Time.AddDate).
 var AddYearsFunc = function.New(&function.Spec{
+	Description: "A time shifted by whole calendar years. Negative n moves backwards.",
 	Params: []function.Parameter{
-		{Name: "t", Type: TimeCapsuleType},
-		{Name: "n", Type: cty.Number},
+		{
+			Name:        "t",
+			Type:        TimeCapsuleType,
+			Description: "The time to shift.",
+		},
+		{
+			Name:        "n",
+			Type:        cty.Number,
+			Description: "Years to add; truncated to a whole number.",
+		},
 	},
 	Type: function.StaticReturnType(TimeCapsuleType),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
@@ -476,9 +574,18 @@ var AddYearsFunc = function.New(&function.Spec{
 
 // AddMonthsFunc adds n calendar months to a time (calls time.Time.AddDate).
 var AddMonthsFunc = function.New(&function.Spec{
+	Description: "A time shifted by whole calendar months. Negative n moves backwards; a day-of-month that the target month lacks rolls forward, as Go's AddDate does.",
 	Params: []function.Parameter{
-		{Name: "t", Type: TimeCapsuleType},
-		{Name: "n", Type: cty.Number},
+		{
+			Name:        "t",
+			Type:        TimeCapsuleType,
+			Description: "The time to shift.",
+		},
+		{
+			Name:        "n",
+			Type:        cty.Number,
+			Description: "Months to add; truncated to a whole number.",
+		},
 	},
 	Type: function.StaticReturnType(TimeCapsuleType),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
@@ -493,9 +600,18 @@ var AddMonthsFunc = function.New(&function.Spec{
 
 // AddDaysFunc adds n calendar days to a time (calls time.Time.AddDate).
 var AddDaysFunc = function.New(&function.Spec{
+	Description: "A time shifted by whole days. Negative n moves backwards.",
 	Params: []function.Parameter{
-		{Name: "t", Type: TimeCapsuleType},
-		{Name: "n", Type: cty.Number},
+		{
+			Name:        "t",
+			Type:        TimeCapsuleType,
+			Description: "The time to shift.",
+		},
+		{
+			Name:        "n",
+			Type:        cty.Number,
+			Description: "Days to add; truncated to a whole number.",
+		},
 	},
 	Type: function.StaticReturnType(TimeCapsuleType),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
@@ -514,9 +630,18 @@ var AddDaysFunc = function.New(&function.Spec{
 
 // TimeBeforeFunc returns true if t1 is before t2.
 var TimeBeforeFunc = function.New(&function.Spec{
+	Description: "Whether t1 is earlier than t2.",
 	Params: []function.Parameter{
-		{Name: "t1", Type: TimeCapsuleType},
-		{Name: "t2", Type: TimeCapsuleType},
+		{
+			Name:        "t1",
+			Type:        TimeCapsuleType,
+			Description: "The time to test.",
+		},
+		{
+			Name:        "t2",
+			Type:        TimeCapsuleType,
+			Description: "The time to compare against.",
+		},
 	},
 	Type: function.StaticReturnType(cty.Bool),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
@@ -534,9 +659,18 @@ var TimeBeforeFunc = function.New(&function.Spec{
 
 // TimeAfterFunc returns true if t1 is after t2.
 var TimeAfterFunc = function.New(&function.Spec{
+	Description: "Whether t1 is later than t2.",
 	Params: []function.Parameter{
-		{Name: "t1", Type: TimeCapsuleType},
-		{Name: "t2", Type: TimeCapsuleType},
+		{
+			Name:        "t1",
+			Type:        TimeCapsuleType,
+			Description: "The time to test.",
+		},
+		{
+			Name:        "t2",
+			Type:        TimeCapsuleType,
+			Description: "The time to compare against.",
+		},
 	},
 	Type: function.StaticReturnType(cty.Bool),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
