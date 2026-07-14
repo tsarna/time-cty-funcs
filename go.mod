@@ -6,7 +6,7 @@ require (
 	github.com/itchyny/timefmt-go v0.1.8
 	github.com/sosodev/duration v1.4.0
 	github.com/stretchr/testify v1.11.1
-	github.com/tsarna/rich-cty-types v0.4.0
+	github.com/tsarna/rich-cty-types v0.5.1
 	github.com/zclconf/go-cty v1.19.0
 )
 
