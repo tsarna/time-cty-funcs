@@ -126,15 +126,35 @@ func TestParseTimeInvalidFormat(t *testing.T) {
 
 // --- timeadd ---
 
+// time::add returns a time from every form, including (string, string). It used to
+// return a *string* from that one, for stdlib compatibility; that duty now belongs to
+// cty's own stdlib.TimeAddFunc, which a host registers as `timeadd` directly.
 func TestTimeAddStringString(t *testing.T) {
-	// Backward-compatible string/string form
 	result, err := TimeAddFunc.Call([]cty.Value{
 		cty.StringVal("2024-01-15T10:30:00Z"),
 		cty.StringVal("1h"),
 	})
 	require.NoError(t, err)
-	assert.Equal(t, cty.String, result.Type())
-	assert.Equal(t, "2024-01-15T11:30:00Z", result.AsString())
+	assert.Equal(t, TimeCapsuleType, result.Type())
+
+	got, err := GetTime(result)
+	require.NoError(t, err)
+	assert.Equal(t, time.Date(2024, 1, 15, 11, 30, 0, 0, time.UTC), got.UTC())
+}
+
+// A string duration is parsed the same way whichever form it lands in. The old
+// (string, string) path accepted only Go syntax, so this call failed while the
+// equivalent with a parsed timestamp succeeded.
+func TestTimeAddStringStringAcceptsISODuration(t *testing.T) {
+	result, err := TimeAddFunc.Call([]cty.Value{
+		cty.StringVal("2024-01-15T10:30:00Z"),
+		cty.StringVal("PT1H"),
+	})
+	require.NoError(t, err)
+
+	got, err := GetTime(result)
+	require.NoError(t, err)
+	assert.Equal(t, time.Date(2024, 1, 15, 11, 30, 0, 0, time.UTC), got.UTC())
 }
 
 func TestTimeAddTimeDuration(t *testing.T) {

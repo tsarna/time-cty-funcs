@@ -11,7 +11,7 @@ import (
 // DurationFunc creates a duration from a string or from a number and unit.
 // Called as duration("5m"), duration("PT5M"), or duration(5, "m").
 var DurationFunc = function.New(&function.Spec{
-	Description: `A duration, from a string ("1h30m" or ISO 8601 "PT1H30M") or from a number and a unit. The first argument's type therefore decides how many arguments there are, which is why externs.cty declares this as two forms.`,
+	Description: `A duration, from a string ("1h30m" or ISO 8601 "PT1H30M") or from a number and a unit. The first argument's type therefore decides how many arguments there are, which is why the externs declare this as two forms.`,
 	Params: []function.Parameter{
 		{
 			// A union (string | number), which cty cannot say; the Type func decides.
@@ -59,7 +59,7 @@ var DurationFunc = function.New(&function.Spec{
 })
 
 // FormatDurationFunc formats a duration as a string.
-// Called as formatduration(d) for Go format (default) or formatduration(d, "iso") for ISO 8601.
+// Called as duration::format(d) for Go format (default) or duration::format(d, "iso") for ISO 8601.
 var FormatDurationFunc = function.New(&function.Spec{
 	Description: "Render a duration.",
 	Params: []function.Parameter{
@@ -69,13 +69,13 @@ var FormatDurationFunc = function.New(&function.Spec{
 			Description: "The duration to render.",
 		},
 	},
-	// Optional, defaulting to "go" — which cty cannot say. See externs.cty.
+	// Optional, defaulting to "go" — which cty cannot say. See the externs.
 	VarParam: &function.Parameter{
 		Name:        "fmt",
 		Type:        cty.String,
 		Description: `"go" ("1h30m0s") or "iso" ("PT1H30M"); defaults to "go".`,
 	},
-	Type: boundedArity("formatduration", 2, cty.String),
+	Type: boundedArity("duration::format", 2, cty.String),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
 		d, err := GetDuration(args[0])
 		if err != nil {
@@ -91,7 +91,7 @@ var FormatDurationFunc = function.New(&function.Spec{
 		case "iso":
 			return cty.StringVal(durationToISO8601(d)), nil
 		default:
-			return cty.NilVal, fmt.Errorf("formatduration: unknown format %q; valid values are \"go\" and \"iso\"", format)
+			return cty.NilVal, fmt.Errorf("duration::format: unknown format %q; valid values are \"go\" and \"iso\"", format)
 		}
 	},
 })
@@ -210,7 +210,7 @@ var DurationDivFunc = function.New(&function.Spec{
 		d, _ := GetDuration(args[0])
 		n, _ := args[1].AsBigFloat().Float64()
 		if n == 0 {
-			return cty.NilVal, fmt.Errorf("durationdiv: division by zero")
+			return cty.NilVal, fmt.Errorf("duration::div: division by zero")
 		}
 		return NewDurationCapsule(time.Duration(float64(d) / n)), nil
 	},

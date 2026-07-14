@@ -10,10 +10,10 @@ import (
 )
 
 // NowFunc returns the current time, optionally in the given IANA timezone.
-// Called as now() or now("America/New_York").
+// Called as time::now() or time::now("America/New_York").
 //
 // The optional tz is a VarParam because cty has no other way to spell an optional
-// argument — see externs.cty, which declares the signature this cannot.
+// argument — see the externs, which declare the signature this cannot.
 var NowFunc = function.New(&function.Spec{
 	Description: "The current time. Without a zone, in the machine's local zone.",
 	VarParam: &function.Parameter{
@@ -21,7 +21,7 @@ var NowFunc = function.New(&function.Spec{
 		Type:        cty.String,
 		Description: `IANA zone name, e.g. "America/New_York".`,
 	},
-	Type: boundedArity("now", 1, TimeCapsuleType),
+	Type: boundedArity("time::now", 1, TimeCapsuleType),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
 		if len(args) == 0 {
 			return NewTimeCapsule(time.Now()), nil
@@ -39,11 +39,11 @@ var NowFunc = function.New(&function.Spec{
 //
 // Forms:
 //
-//	parsetime(s)              — RFC 3339 (timezone required)
-//	parsetime(format, s)      — parse s using Go layout (or @name alias)
-//	parsetime(format, s, tz)  — same, but interpret s in the given IANA timezone
+//	time::parse(s)              — RFC 3339 (timezone required)
+//	time::parse(format, s)      — parse s using Go layout (or @name alias)
+//	time::parse(format, s, tz)  — same, but interpret s in the given IANA timezone
 var ParseTimeFunc = function.New(&function.Spec{
-	Description: "Parse a timestamp. With one argument it reads RFC 3339; with two, the first is a Go reference layout or an @alias; a third interprets the parsed wall-clock in that zone. The meaning of the first argument therefore depends on how many there are, which is why externs.cty declares this as three forms.",
+	Description: "Parse a timestamp. With one argument it reads RFC 3339; with two, the first is a Go reference layout or an @alias; a third interprets the parsed wall-clock in that zone. The meaning of the first argument therefore depends on how many there are, which is why the externs declare this as three forms.",
 	// Every argument is in the variadic, because there is no other way to say that
 	// arg 0 means something different depending on how many there are.
 	VarParam: &function.Parameter{
@@ -53,7 +53,7 @@ var ParseTimeFunc = function.New(&function.Spec{
 	},
 	Type: func(args []cty.Value) (cty.Type, error) {
 		if len(args) < 1 || len(args) > 3 {
-			return cty.NilType, fmt.Errorf("parsetime() takes 1 to 3 arguments")
+			return cty.NilType, fmt.Errorf("time::parse() takes 1 to 3 arguments")
 		}
 		return TimeCapsuleType, nil
 	},
@@ -63,7 +63,7 @@ var ParseTimeFunc = function.New(&function.Spec{
 			s := args[0].AsString()
 			t, err := time.Parse(time.RFC3339Nano, s)
 			if err != nil {
-				return cty.NilVal, fmt.Errorf("parsetime: invalid RFC 3339 timestamp %q: %s", s, err)
+				return cty.NilVal, fmt.Errorf("time::parse: invalid RFC 3339 timestamp %q: %s", s, err)
 			}
 			return NewTimeCapsule(t), nil
 		case 2:
@@ -73,7 +73,7 @@ var ParseTimeFunc = function.New(&function.Spec{
 			}
 			t, err := time.Parse(layout, args[1].AsString())
 			if err != nil {
-				return cty.NilVal, fmt.Errorf("parsetime: cannot parse %q with format %q: %s", args[1].AsString(), args[0].AsString(), err)
+				return cty.NilVal, fmt.Errorf("time::parse: cannot parse %q with format %q: %s", args[1].AsString(), args[0].AsString(), err)
 			}
 			return NewTimeCapsule(t), nil
 		case 3:
@@ -83,32 +83,41 @@ var ParseTimeFunc = function.New(&function.Spec{
 			}
 			loc, err := time.LoadLocation(args[2].AsString())
 			if err != nil {
-				return cty.NilVal, fmt.Errorf("parsetime: invalid timezone %q: %s", args[2].AsString(), err)
+				return cty.NilVal, fmt.Errorf("time::parse: invalid timezone %q: %s", args[2].AsString(), err)
 			}
 			t, err := time.ParseInLocation(layout, args[1].AsString(), loc)
 			if err != nil {
-				return cty.NilVal, fmt.Errorf("parsetime: cannot parse %q with format %q: %s", args[1].AsString(), args[0].AsString(), err)
+				return cty.NilVal, fmt.Errorf("time::parse: cannot parse %q with format %q: %s", args[1].AsString(), args[0].AsString(), err)
 			}
 			return NewTimeCapsule(t), nil
 		default:
-			return cty.NilVal, fmt.Errorf("parsetime() takes 1 to 3 arguments")
+			return cty.NilVal, fmt.Errorf("time::parse() takes 1 to 3 arguments")
 		}
 	},
 })
 
-// TimeAddFunc adds a duration to a time. Backward-compatible with the stdlib
-// timeadd(string, string) form; also accepts capsule types.
+// TimeAddFunc adds a duration to a time, and always returns a time.
 //
 // Signatures:
 //
-//	timeadd(string, string) → string   (standard hcl behavior)
-//	timeadd(time, duration) → time
-//	timeadd(time, string)   → time     (string auto-parsed as duration)
-//	timeadd(string, duration) → time   (string auto-parsed as RFC 3339)
+//	time::add(time, duration)   → time
+//	time::add(time, string)     → time   (string parsed as a duration)
+//	time::add(string, duration) → time   (string parsed as RFC 3339 Nano)
+//	time::add(string, string)   → time
+//
+// It carries no stdlib-compatibility burden: cty's own stdlib.TimeAddFunc is the
+// string-in/string-out `timeadd`, and a host that wants that behavior registers it
+// directly. Shedding that duty is what lets every form here return a time — so the
+// return type is static, and a string is parsed the same way whichever form it lands
+// in. It used to be neither: (string, string) returned a *string* and accepted only
+// Go duration syntax, so time::add("2024-01-01T00:00:00Z", "PT5M") failed while
+// time::add(time::parse("2024-01-01T00:00:00Z"), "PT5M") succeeded.
 var TimeAddFunc = function.New(&function.Spec{
-	Description: "Add a duration to a time. The (string, string) form is the stdlib-compatible one and returns a string; the others return a time. The return type therefore depends on the arguments, which is why externs.cty declares this as four forms.",
+	Description: "Add a duration to a time. Either argument may be given as a string: a timestamp as RFC 3339, a duration in Go syntax (\"1h30m\") or ISO 8601 (\"PT1H30M\").",
 	Params: []function.Parameter{
 		{
+			// Genuinely a union (time | string), which cty has no way to say; the Type
+			// func decides. The extern declares one form per combination.
 			Name:        "ts",
 			Type:        cty.DynamicPseudoType,
 			Description: "The time to add to: a time, or an RFC 3339 string.",
@@ -116,7 +125,7 @@ var TimeAddFunc = function.New(&function.Spec{
 		{
 			Name:        "dur",
 			Type:        cty.DynamicPseudoType,
-			Description: "The duration to add: a duration, or a string. Go syntax always works; ISO 8601 works except in the (string, string) form.",
+			Description: "The duration to add: a duration, or a string in Go or ISO 8601 syntax.",
 		},
 	},
 	Type: func(args []cty.Value) (cty.Type, error) {
@@ -125,40 +134,22 @@ var TimeAddFunc = function.New(&function.Spec{
 		if t0 == cty.DynamicPseudoType || t1 == cty.DynamicPseudoType {
 			return cty.DynamicPseudoType, nil
 		}
-		// (string, string) — backward-compatible path returns string
-		if t0 == cty.String && t1 == cty.String {
-			return cty.String, nil
-		}
-		// All other valid combinations return time
 		validTS := t0 == TimeCapsuleType || t0 == cty.String
 		validDur := t1 == DurationCapsuleType || t1 == cty.String
 		if validTS && validDur {
 			return TimeCapsuleType, nil
 		}
-		return cty.NilType, fmt.Errorf("timeadd: unsupported argument types %s and %s", t0.FriendlyName(), t1.FriendlyName())
+		return cty.NilType, fmt.Errorf("time::add: unsupported argument types %s and %s", t0.FriendlyName(), t1.FriendlyName())
 	},
 	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
-		// (string, string) — backward-compatible behavior preserved exactly
-		if args[0].Type() == cty.String && args[1].Type() == cty.String {
-			ts, err := time.Parse(time.RFC3339, args[0].AsString())
-			if err != nil {
-				return cty.NilVal, fmt.Errorf("timeadd: invalid timestamp %q: %s", args[0].AsString(), err)
-			}
-			dur, err := time.ParseDuration(args[1].AsString())
-			if err != nil {
-				return cty.NilVal, fmt.Errorf("timeadd: invalid duration %q: %s", args[1].AsString(), err)
-			}
-			return cty.StringVal(ts.Add(dur).Format(time.RFC3339)), nil
-		}
-
-		// Get the time value
+		// The time: a capsule, or an RFC 3339 (Nano) string.
 		var t time.Time
 		switch args[0].Type() {
 		case cty.String:
 			var err error
 			t, err = time.Parse(time.RFC3339Nano, args[0].AsString())
 			if err != nil {
-				return cty.NilVal, fmt.Errorf("timeadd: invalid timestamp %q: %s", args[0].AsString(), err)
+				return cty.NilVal, fmt.Errorf("time::add: invalid timestamp %q: %s", args[0].AsString(), err)
 			}
 		case TimeCapsuleType:
 			var err error
@@ -167,10 +158,10 @@ var TimeAddFunc = function.New(&function.Spec{
 				return cty.NilVal, err
 			}
 		default:
-			return cty.NilVal, fmt.Errorf("timeadd: first argument must be a time or string, got %s", args[0].Type().FriendlyName())
+			return cty.NilVal, fmt.Errorf("time::add: first argument must be a time or string, got %s", args[0].Type().FriendlyName())
 		}
 
-		// Get the duration value
+		// The duration: a capsule, or a string in Go or ISO 8601 syntax.
 		var d time.Duration
 		switch args[1].Type() {
 		case cty.String:
@@ -189,7 +180,7 @@ var TimeAddFunc = function.New(&function.Spec{
 				return cty.NilVal, err
 			}
 		default:
-			return cty.NilVal, fmt.Errorf("timeadd: second argument must be a duration or string, got %s", args[1].Type().FriendlyName())
+			return cty.NilVal, fmt.Errorf("time::add: second argument must be a duration or string, got %s", args[1].Type().FriendlyName())
 		}
 
 		return NewTimeCapsule(t.Add(d)), nil
@@ -200,10 +191,10 @@ var TimeAddFunc = function.New(&function.Spec{
 //
 // Signatures:
 //
-//	timesub(time, time)     → duration   (elapsed from t2 to t1; negative if t1 < t2)
-//	timesub(time, duration) → time       (time minus duration)
+//	time::sub(time, time)     → duration   (elapsed from t2 to t1; negative if t1 < t2)
+//	time::sub(time, duration) → time       (time minus duration)
 var TimeSubFunc = function.New(&function.Spec{
-	Description: "Subtract from a time: another time, giving the duration between them (negative if t2 is later), or a duration, giving the earlier time. The return type therefore depends on the arguments, which is why externs.cty declares this as two forms.",
+	Description: "Subtract from a time: another time, giving the duration between them (negative if t2 is later), or a duration, giving the earlier time. The return type therefore depends on the arguments, which is why the externs declare this as two forms.",
 	Params: []function.Parameter{
 		{
 			Name:        "t1",
@@ -212,7 +203,7 @@ var TimeSubFunc = function.New(&function.Spec{
 		},
 		{
 			// Genuinely a union (time | duration) and therefore not sayable in cty,
-			// which has no union type — the Type func below decides. externs.cty
+			// which has no union type — the Type func below decides. the externs
 			// declares the two forms.
 			Name:        "t2",
 			Type:        cty.DynamicPseudoType,
@@ -230,7 +221,7 @@ var TimeSubFunc = function.New(&function.Spec{
 		case DurationCapsuleType:
 			return TimeCapsuleType, nil
 		default:
-			return cty.NilType, fmt.Errorf("timesub: second argument must be a time or duration, got %s", t1.FriendlyName())
+			return cty.NilType, fmt.Errorf("time::sub: second argument must be a time or duration, got %s", t1.FriendlyName())
 		}
 	},
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
@@ -252,12 +243,12 @@ var TimeSubFunc = function.New(&function.Spec{
 			}
 			return NewTimeCapsule(t1.Add(-d)), nil
 		default:
-			return cty.NilVal, fmt.Errorf("timesub: second argument must be a time or duration, got %s", args[1].Type().FriendlyName())
+			return cty.NilVal, fmt.Errorf("time::sub: second argument must be a time or duration, got %s", args[1].Type().FriendlyName())
 		}
 	},
 })
 
-// SinceFunc returns the duration elapsed since the given time (equivalent to timesub(now(), t)).
+// SinceFunc returns the duration elapsed since the given time (equivalent to time::sub(time::now(), t)).
 var SinceFunc = function.New(&function.Spec{
 	Description: "How long ago a time was: the duration from it until now. Negative if it is in the future.",
 	Params: []function.Parameter{
@@ -277,7 +268,7 @@ var SinceFunc = function.New(&function.Spec{
 	},
 })
 
-// UntilFunc returns the duration until the given time (equivalent to timesub(t, now())).
+// UntilFunc returns the duration until the given time (equivalent to time::sub(t, time::now())).
 var UntilFunc = function.New(&function.Spec{
 	Description: "How far off a time is: the duration from now until it. Negative if it has passed.",
 	Params: []function.Parameter{
@@ -298,7 +289,7 @@ var UntilFunc = function.New(&function.Spec{
 })
 
 // FormatTimeFunc formats a time value using Go's reference-time format or a @name alias.
-// Called as formattime("2006-01-02", t) or formattime("@rfc3339", t).
+// Called as time::format("2006-01-02", t) or time::format("@rfc3339", t).
 var FormatTimeFunc = function.New(&function.Spec{
 	Description: "Render a time with a Go reference layout.",
 	Params: []function.Parameter{
@@ -328,7 +319,7 @@ var FormatTimeFunc = function.New(&function.Spec{
 })
 
 // StrftimeFunc formats a time using a strftime-style format string (via itchyny/timefmt-go).
-// Called as strftime("%Y-%m-%d", t).
+// Called as time::strftime("%Y-%m-%d", t).
 var StrftimeFunc = function.New(&function.Spec{
 	Description: "Render a time with a C-style strftime format. Unlike formattime, @aliases are not resolved here.",
 	Params: []function.Parameter{
@@ -354,7 +345,7 @@ var StrftimeFunc = function.New(&function.Spec{
 })
 
 // StrptimeFunc parses a time string using a strftime-style format (via itchyny/timefmt-go).
-// Called as strptime("%Y-%m-%d", "2024-01-15") or strptime("%Y-%m-%d", "2024-01-15", "UTC").
+// Called as time::strptime("%Y-%m-%d", "2024-01-15") or time::strptime("%Y-%m-%d", "2024-01-15", "UTC").
 var StrptimeFunc = function.New(&function.Spec{
 	Description: "Parse a timestamp with a C-style strftime format. Unlike parsetime and formattime, @aliases are not resolved here.",
 	Params: []function.Parameter{
@@ -369,7 +360,7 @@ var StrptimeFunc = function.New(&function.Spec{
 			Description: "The timestamp to parse.",
 		},
 	},
-	// Optional — hence a variadic, which is all cty offers. See externs.cty.
+	// Optional — hence a variadic, which is all cty offers. See the externs.
 	VarParam: &function.Parameter{
 		Name:        "tz",
 		Type:        cty.String,
@@ -377,19 +368,19 @@ var StrptimeFunc = function.New(&function.Spec{
 	},
 	Type: func(args []cty.Value) (cty.Type, error) {
 		if len(args) > 3 {
-			return cty.NilType, fmt.Errorf("strptime() takes 2 or 3 arguments")
+			return cty.NilType, fmt.Errorf("time::strptime() takes 2 or 3 arguments")
 		}
 		return TimeCapsuleType, nil
 	},
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
 		t, err := timefmt.Parse(args[1].AsString(), args[0].AsString())
 		if err != nil {
-			return cty.NilVal, fmt.Errorf("strptime: cannot parse %q with format %q: %s", args[1].AsString(), args[0].AsString(), err)
+			return cty.NilVal, fmt.Errorf("time::strptime: cannot parse %q with format %q: %s", args[1].AsString(), args[0].AsString(), err)
 		}
 		if len(args) == 3 {
 			loc, err := time.LoadLocation(args[2].AsString())
 			if err != nil {
-				return cty.NilVal, fmt.Errorf("strptime: invalid timezone %q: %s", args[2].AsString(), err)
+				return cty.NilVal, fmt.Errorf("time::strptime: invalid timezone %q: %s", args[2].AsString(), err)
 			}
 			// Reinterpret the parsed wall-clock components as being in the given timezone,
 			// rather than converting the UTC instant.
@@ -402,7 +393,7 @@ var StrptimeFunc = function.New(&function.Spec{
 // --- Unix interop ---
 
 // FromUnixFunc creates a time from a Unix epoch value.
-// Called as fromunix(n) for seconds (possibly fractional), or fromunix(n, unit)
+// Called as time::from_unix(n) for seconds (possibly fractional), or time::from_unix(n, unit)
 // where unit is "s", "ms", "us", or "ns". Always returns UTC.
 var FromUnixFunc = function.New(&function.Spec{
 	Description: "A time from a Unix epoch count. Always returns a UTC time.",
@@ -414,13 +405,13 @@ var FromUnixFunc = function.New(&function.Spec{
 		},
 	},
 	// The unit is optional and defaults to "s" — which cty cannot say, so it is faked
-	// with a variadic. externs.cty declares the real signature.
+	// with a variadic. the externs declares the real signature.
 	VarParam: &function.Parameter{
 		Name:        "unit",
 		Type:        cty.String,
 		Description: `One of "s", "ms", "us", "ns"; defaults to "s".`,
 	},
-	Type: boundedArity("fromunix", 2, TimeCapsuleType),
+	Type: boundedArity("time::from_unix", 2, TimeCapsuleType),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
 		unit := "s"
 		if len(args) > 1 {
@@ -439,13 +430,13 @@ var FromUnixFunc = function.New(&function.Spec{
 		case "ns":
 			return NewTimeCapsule(time.Unix(0, int64(n)).UTC()), nil
 		default:
-			return cty.NilVal, fmt.Errorf("fromunix: unknown unit %q; valid units: s, ms, us, ns", unit)
+			return cty.NilVal, fmt.Errorf("time::from_unix: unknown unit %q; valid units: s, ms, us, ns", unit)
 		}
 	},
 })
 
 // UnixFunc returns the Unix epoch value for a time.
-// Called as unix(t) for fractional seconds, or unix(t, unit) where unit is
+// Called as time::to_unix(t) for fractional seconds, or time::to_unix(t, unit) where unit is
 // "s" (float), "ms", "us", or "ns" (integers).
 var UnixFunc = function.New(&function.Spec{
 	Description: "A time as a Unix epoch count. Seconds are fractional; the other units are whole.",
@@ -462,7 +453,7 @@ var UnixFunc = function.New(&function.Spec{
 		Type:        cty.String,
 		Description: `One of "s", "ms", "us", "ns"; defaults to "s".`,
 	},
-	Type: boundedArity("unix", 2, cty.Number),
+	Type: boundedArity("time::to_unix", 2, cty.Number),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
 		t, err := GetTime(args[0])
 		if err != nil {
@@ -482,7 +473,7 @@ var UnixFunc = function.New(&function.Spec{
 		case "ns":
 			return cty.NumberIntVal(t.UnixNano()), nil
 		default:
-			return cty.NilVal, fmt.Errorf("unix: unknown unit %q; valid units: s, ms, us, ns", unit)
+			return cty.NilVal, fmt.Errorf("time::to_unix: unknown unit %q; valid units: s, ms, us, ns", unit)
 		}
 	},
 })
@@ -490,7 +481,7 @@ var UnixFunc = function.New(&function.Spec{
 // --- Timezone ---
 
 // TimezoneFunc returns the timezone name.
-// Called as timezone() for the local system timezone, or timezone(t) for the
+// Called as time::zone() for the local system timezone, or time::zone(t) for the
 // timezone stored in a time value.
 var TimezoneFunc = function.New(&function.Spec{
 	Description: "A time's zone name. Without an argument, the machine's local zone.",
@@ -501,7 +492,7 @@ var TimezoneFunc = function.New(&function.Spec{
 		Type:        TimeCapsuleType,
 		Description: "The time whose zone to report; omit for the local zone.",
 	},
-	Type: boundedArity("timezone", 1, cty.String),
+	Type: boundedArity("time::zone", 1, cty.String),
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
 		if len(args) == 0 {
 			return cty.StringVal(time.Local.String()), nil
@@ -538,7 +529,7 @@ var InTimezoneFunc = function.New(&function.Spec{
 		}
 		loc, err := time.LoadLocation(args[1].AsString())
 		if err != nil {
-			return cty.NilVal, fmt.Errorf("intimezone: invalid timezone %q: %s", args[1].AsString(), err)
+			return cty.NilVal, fmt.Errorf("time::in_zone: invalid timezone %q: %s", args[1].AsString(), err)
 		}
 		return NewTimeCapsule(t.In(loc)), nil
 	},

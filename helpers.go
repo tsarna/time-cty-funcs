@@ -17,7 +17,7 @@ import (
 // It exists because a cty VarParam has no upper bound of its own. A function that
 // fakes an *optional* argument with a variadic — which is the only way cty offers —
 // therefore accepts any number of trailing arguments, and its Impl, reading only the
-// one it expects, drops the rest in silence: now("UTC", "junk") used to return a
+// one it expects, drops the rest in silence: time::now("UTC", "junk") used to return a
 // time. Declaring the ceiling is how such a function says how many arguments it
 // actually takes.
 func boundedArity(name string, maxArgs int, ret cty.Type) function.TypeFunc {
@@ -83,7 +83,7 @@ func parseDurationString(s string) (cty.Value, error) {
 			return cty.NilVal, fmt.Errorf("invalid ISO 8601 duration %q: %s", s, err)
 		}
 		if d.Years != 0 || d.Months != 0 {
-			return cty.NilVal, fmt.Errorf("calendar durations with years or months cannot be represented as a fixed duration; use addyears() or addmonths() instead")
+			return cty.NilVal, fmt.Errorf("calendar durations with years or months cannot be represented as a fixed duration; use time::add_years() or time::add_months() instead")
 		}
 		td := d.ToTimeDuration()
 		if strings.HasPrefix(s, "-") {

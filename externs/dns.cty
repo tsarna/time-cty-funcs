@@ -1,0 +1,25 @@
+//functy:extern
+
+namespace dns
+
+// DNS zone-serial functions, provided in Go by time-cty-funcs (GetTimeFunctions).
+// Signatures only — never compiled, nothing here is callable.
+//
+// Both take a serial that may be a number *or* a string. cty has no union type, so
+// its metadata can only say "dynamic", which says nothing at all; each is declared
+// here as one form per type. next_zone_serial additionally has an optional trailing
+// time, which cty can only fake with a variadic.
+
+// The next DNS zone serial: whichever is greater of s + 1 and today's date in the
+// conventional YYYYMMDDNN form, so that the serial always advances.
+func next_zone_serial(s: number, t?: time) -> number
+func next_zone_serial(s: string, t?: time) -> number
+
+// The date a DNS zone serial in YYYYMMDDNN form encodes, as a UTC midnight time. The
+// NN revision suffix is discarded.
+//
+// A serial need not encode a real date, so an out-of-range component is clamped to
+// the nearest valid one: a month past 12 becomes December 31st, and a day past the
+// end of its month becomes the last day of that month.
+func parse_zone_serial(s: number) -> time
+func parse_zone_serial(s: string) -> time

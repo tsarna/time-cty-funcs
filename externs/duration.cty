@@ -1,0 +1,21 @@
+//functy:extern
+
+namespace duration
+
+// Duration functions, provided in Go by time-cty-funcs (GetTimeFunctions).
+// Signatures only — never compiled, nothing here is callable.
+//
+// Only `format` is declared: cty cannot say that its second argument is optional and
+// defaults to "go", so it has to fake it with a variadic, which erases the name, the
+// type, and the default. The rest of the duration functions — add, sub, mul, div,
+// truncate, round, abs, lt, gt — have complete cty metadata and are deliberately
+// absent.
+//
+// The `duration()` *constructor* is not here either: it is un-namespaced (it reads as
+// a cast, like tostring), so it is declared in externs/global.cty.
+
+// Render a duration.
+func format(
+    d: duration,
+    format: string = "go",  // "go" ("1h30m0s") or "iso" ("PT1H30M")
+) -> string

@@ -1,0 +1,66 @@
+//functy:extern
+
+namespace time
+
+// Time functions, provided in Go by time-cty-funcs (GetTimeFunctions). This file
+// declares signatures only — it is never compiled, and nothing here is callable.
+//
+// It exists because cty cannot express what some of these functions really accept.
+// cty can only make a function's *trailing* parameters optional, so an optional
+// argument has to be faked with a variadic — which erases its name, its type, and its
+// default. And a cty function has one signature, so a function whose argument shapes
+// differ per call, or whose return type depends on what it was handed, cannot be
+// described at all.
+//
+// The functions absent from this file — format, strftime, since, until, add_years,
+// add_months, add_days, in_zone, before, after — are absent deliberately: their cty
+// metadata is complete, so an extern would only be a second place for it to drift.
+
+// The current time. Without a zone, in the machine's local zone.
+func now(
+    tz?: string,  // IANA zone name, e.g. "America/New_York"
+) -> time
+
+// Parse a timestamp.
+//
+// With one argument it reads RFC 3339. With two, the first is a Go reference layout
+// ("2006-01-02T15:04:05Z07:00") or an @alias such as @rfc3339. A third argument
+// interprets the parsed wall-clock in that zone.
+func parse(s: string) -> time
+func parse(format: string, s: string) -> time
+func parse(format: string, s: string, tz: string) -> time
+
+// Parse a timestamp with a C-style strftime format ("%Y-%m-%d"). Unlike time::parse
+// and time::format, @aliases are not resolved here.
+func strptime(
+    format: string,  // strftime-style layout
+    s: string,  // the timestamp to parse
+    tz?: string,  // IANA zone; the parsed wall-clock is read as being in it
+) -> time
+
+// A time from a Unix epoch count. Always returns a UTC time.
+func from_unix(
+    n: number,  // the epoch count; fractional seconds are honored
+    unit: string = "s",  // one of "s", "ms", "us", "ns"
+) -> time
+
+// A time as a Unix epoch count. Seconds are fractional; the other units are whole.
+func to_unix(
+    t: time,
+    unit: string = "s",  // one of "s", "ms", "us", "ns"
+) -> number
+
+// A time's zone name. Without an argument, the machine's local zone.
+func zone(t?: time) -> string
+
+// Add a duration to a time. Either argument may be given as a string: a timestamp as
+// RFC 3339, a duration in Go syntax ("1h30m") or ISO 8601 ("PT1H30M").
+func add(ts: time, dur: duration) -> time
+func add(ts: time, dur: string) -> time
+func add(ts: string, dur: duration) -> time
+func add(ts: string, dur: string) -> time
+
+// Subtract from a time: another time, giving the duration between them (negative if
+// t2 is later), or a duration, giving the earlier time.
+func sub(t1: time, t2: time) -> duration
+func sub(t1: time, d: duration) -> time

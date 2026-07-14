@@ -25,7 +25,7 @@ type Duration struct {
 // TimeCapsuleType is a cty capsule type wrapping Timestamp.
 // Supports equality (==, !=) via Equals/RawEquals.
 // Note: ordering operators (<, >, etc.) are not available for capsule types
-// in go-cty — use timesub() and compare the resulting duration instead.
+// in go-cty — use time::sub() and compare the resulting duration instead.
 var TimeCapsuleType = cty.CapsuleWithOps("time", reflect.TypeOf(Timestamp{}), &cty.CapsuleOps{
 	// Equals uses time.Time.Equal so that two instants in different timezones
 	// that represent the same moment compare as equal.
@@ -108,7 +108,7 @@ func (t *Timestamp) ToString(_ context.Context) (string, error) {
 }
 
 // ToString formats the duration using Go's default duration syntax (e.g. "1h30m5s").
-// This matches the default output of formatduration().
+// This matches the default output of duration::format().
 func (d *Duration) ToString(_ context.Context) (string, error) {
 	return d.Duration.String(), nil
 }

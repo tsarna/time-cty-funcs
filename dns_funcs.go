@@ -10,10 +10,10 @@ import (
 
 // NextZoneSerialFunc computes the next DNS zone serial number in YYYYMMDDNN format.
 //
-// Called as nextzoneserial(s) or nextzoneserial(s, t).
+// Called as dns::next_zone_serial(s) or dns::next_zone_serial(s, t).
 //
 //	s: current serial (number or string)
-//	t: optional time capsule; defaults to now()
+//	t: optional time capsule; defaults to time::now()
 //
 // Computes x = first serial of the day for t (YYYYMMDD * 100), then returns max(s+1, x).
 var NextZoneSerialFunc = function.New(&function.Spec{
@@ -26,8 +26,8 @@ var NextZoneSerialFunc = function.New(&function.Spec{
 			Description: "The current serial, as a number or a string.",
 		},
 	},
-	// Optional, defaulting to now() — which cty cannot say. It is a time, and now
-	// says so. See externs.cty.
+	// Optional, defaulting to time::now() — which cty cannot say. It is a time, and now
+	// says so. See the externs.
 	VarParam: &function.Parameter{
 		Name:        "t",
 		Type:        TimeCapsuleType,
@@ -35,16 +35,16 @@ var NextZoneSerialFunc = function.New(&function.Spec{
 	},
 	Type: func(args []cty.Value) (cty.Type, error) {
 		if len(args) > 2 {
-			return cty.NilType, fmt.Errorf("nextzoneserial() takes 1 or 2 arguments")
+			return cty.NilType, fmt.Errorf("dns::next_zone_serial() takes 1 or 2 arguments")
 		}
 		t0 := args[0].Type()
 		if t0 != cty.Number && t0 != cty.String && t0 != cty.DynamicPseudoType {
-			return cty.NilType, fmt.Errorf("nextzoneserial: serial must be a number or string, got %s", t0.FriendlyName())
+			return cty.NilType, fmt.Errorf("dns::next_zone_serial: serial must be a number or string, got %s", t0.FriendlyName())
 		}
 		return cty.Number, nil
 	},
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
-		s, err := parseSerialArg(args[0], "nextzoneserial")
+		s, err := parseSerialArg(args[0], "dns::next_zone_serial")
 		if err != nil {
 			return cty.NilVal, err
 		}
@@ -80,12 +80,12 @@ var ParseZoneSerialFunc = function.New(&function.Spec{
 	Type: func(args []cty.Value) (cty.Type, error) {
 		t := args[0].Type()
 		if t != cty.Number && t != cty.String && t != cty.DynamicPseudoType {
-			return cty.NilType, fmt.Errorf("parsezoneserial: serial must be a number or string, got %s", t.FriendlyName())
+			return cty.NilType, fmt.Errorf("dns::parse_zone_serial: serial must be a number or string, got %s", t.FriendlyName())
 		}
 		return TimeCapsuleType, nil
 	},
 	Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
-		s, err := parseSerialArg(args[0], "parsezoneserial")
+		s, err := parseSerialArg(args[0], "dns::parse_zone_serial")
 		if err != nil {
 			return cty.NilVal, err
 		}

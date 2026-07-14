@@ -1,0 +1,25 @@
+//functy:extern
+
+// The `duration` constructor, provided in Go by time-cty-funcs (GetTimeFunctions).
+// Signatures only — never compiled, nothing here is callable.
+//
+// It is the one function in this package with no namespace: it constructs the
+// `duration` type and reads as a cast, like tostring(x). Everything that *operates*
+// on a duration lives in the `duration::` namespace, in externs/duration.cty. (A bare
+// name and a namespace of the same name coexist without conflict — they are simply
+// different keys.)
+//
+// It is declared here because it is genuinely overloaded: the type of the first
+// argument decides how many arguments there are, and cty has one signature to say it
+// in.
+
+// A duration.
+//
+// From a string it accepts Go syntax ("1h30m") or ISO 8601 ("PT1H30M"); an ISO
+// duration carrying years or months is rejected, since neither has a fixed length.
+// From a number it takes the unit as a second argument.
+func duration(s: string) -> duration
+func duration(
+    n: number,  // may be fractional: duration(1.5, "s") is 1.5 seconds
+    unit: string,  // one of "h", "m", "s", "ms", "us", "ns"
+) -> duration

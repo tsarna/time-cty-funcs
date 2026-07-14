@@ -16,9 +16,9 @@ A cty capsule type wrapping Go's `time.Time`. Supports equality (`==`, `!=`) via
 
 ### `timecty.DurationCapsuleType`
 
-A cty capsule type wrapping Go's `time.Duration` (int64 nanoseconds; range ±~292 years). Supports equality (`==`, `!=`) via `CapsuleOps`. Use `durationlt`/`durationgt` (or extract via `get(d, unit)` and compare numerically) for ordering.
+A cty capsule type wrapping Go's `time.Duration` (int64 nanoseconds; range ±~292 years). Supports equality (`==`, `!=`) via `CapsuleOps`. Use `duration::lt`/`duration::gt` (or extract via `get(d, unit)` and compare numerically) for ordering.
 
-**Limitation:** Go's `time.Duration` cannot represent calendar months or years exactly. ISO 8601 durations like `P1Y` or `P1M` are rejected; use `addyears()` / `addmonths()` instead.
+**Limitation:** Go's `time.Duration` cannot represent calendar months or years exactly. ISO 8601 durations like `P1Y` or `P1M` are rejected; use `time::add_years()` / `time::add_months()` instead.
 
 ### Helper functions
 
@@ -40,7 +40,34 @@ for name, fn := range timecty.GetTimeFunctions() {
 }
 ```
 
-`GetTimeFunctions()` returns the functions described below. The `timeadd` entry supersedes the go-cty stdlib version, adding capsule-type support while remaining backward-compatible with the `(string, string) → string` form.
+`GetTimeFunctions()` returns the functions described below, keyed by the name they are callable under. The names are **namespaced** — `time::add`, `duration::truncate`, `dns::next_zone_serial` — following HashiCorp's conventions for provider-defined functions: the leaf name does not repeat the namespace, and namespaced functions use underscores (HCL's *built-in* functions run words together for historical reasons).
+
+`duration` keeps a bare name: it is the type constructor, and reads as one.
+
+There is deliberately no `timeadd`. That name belongs to go-cty's own `stdlib.TimeAddFunc`, the string-in/string-out function HCL has always had; a host that wants it registers it directly. `time::add` carries no compatibility burden as a result, which is why every one of its forms returns a `time`.
+
+### functy externs — the signatures cty cannot express
+
+Some of these functions cannot describe themselves through cty's metadata. cty can only make a function's *trailing* parameters optional, so an optional argument has to be faked with a variadic — which erases its name, its type, and its default: `time::from_unix(n, unit = "s")` reflects as `from_unix(n, ...args)`. And a cty function has one signature, so a function whose argument shapes differ per call (`time::parse(s)` vs `time::parse(format, s)`), or whose parameters are a union (`dns::parse_zone_serial` takes a number *or* a string), cannot be described at all.
+
+`Externs()` returns [functy](https://github.com/tsarna/functy) declarations stating what each really accepts, keyed by a filename to report in diagnostics. A functy host registers them so that `help()`, generated documentation, and editor tooling show the true signature:
+
+```go
+for name, src := range timecty.Externs() {
+    parser.RegisterExterns(src, name)
+}
+```
+
+```text
+> help("time::parse")
+time::parse(s: string) -> time
+time::parse(format: string, s: string) -> time
+time::parse(format: string, s: string, tz: string) -> time
+
+Parse a timestamp.
+```
+
+This package does **not** import functy — the bytes are opaque here, and `embed` is stdlib. Functions absent from the declarations are absent deliberately: their cty metadata is complete, so an extern would only be a second place for the same facts to drift.
 
 ### rich-cty-types integration
 
@@ -60,8 +87,8 @@ for name, fn := range timecty.GetTimeFunctions() {
 
 With these registered:
 
-- `tostring(t)` formats a `time` as RFC 3339 with nanosecond precision (equivalent to `formattime("@rfc3339nano", t)`).
-- `tostring(d)` formats a `duration` using Go syntax (equivalent to `formatduration(d)`).
+- `tostring(t)` formats a `time` as RFC 3339 with nanosecond precision (equivalent to `time::format("@rfc3339nano", t)`).
+- `tostring(d)` formats a `duration` using Go syntax (equivalent to `duration::format(d)`).
 - `get(t, part)` extracts a calendar field from a `time`. Valid `part` values: `"year"`, `"month"`, `"day"`, `"hour"`, `"minute"`, `"second"`, `"nanosecond"`, `"weekday"` (0=Sunday), `"yearday"`, `"isoweek"`, `"isoyear"`.
 - `get(d, unit)` extracts a `duration` in the given unit. `"h"`, `"m"`, `"s"` return floats; `"ms"`, `"us"`, `"ns"` return integers.
 
@@ -96,7 +123,7 @@ PT0.5S         # 500 milliseconds
 
 ### Named format aliases (`@` prefix)
 
-`formattime` and `parsetime` accept `@name` shortcuts for Go's `time` package constants:
+`time::format` and `time::parse` accept `@name` shortcuts for Go's `time` package constants:
 
 | Name | Example output |
 |------|----------------|
@@ -115,45 +142,45 @@ PT0.5S         # 500 milliseconds
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `now()` | `() → time` | Current time in local timezone |
-| `now(tz)` | `(string) → time` | Current time in named IANA timezone |
-| `parsetime(s)` | `(string) → time` | Parse RFC 3339 string |
-| `parsetime(format, s)` | `(string, string) → time` | Parse with Go reference-time format or `@name` alias |
-| `parsetime(format, s, tz)` | `(string, string, string) → time` | Parse with format; apply IANA timezone |
-| `fromunix(n)` | `(number) → time` | Create time from Unix seconds (integer or fractional) in UTC |
-| `fromunix(n, unit)` | `(number, string) → time` | Unit: `"s"`, `"ms"`, `"us"`, or `"ns"` |
-| `strptime(format, s)` | `(string, string) → time` | Parse with strftime-style format |
-| `strptime(format, s, tz)` | `(string, string, string) → time` | Parse with strftime format; apply IANA timezone |
+| `time::now()` | `() → time` | Current time in local timezone |
+| `time::now(tz)` | `(string) → time` | Current time in named IANA timezone |
+| `time::parse(s)` | `(string) → time` | Parse RFC 3339 string |
+| `time::parse(format, s)` | `(string, string) → time` | Parse with Go reference-time format or `@name` alias |
+| `time::parse(format, s, tz)` | `(string, string, string) → time` | Parse with format; apply IANA timezone |
+| `time::from_unix(n)` | `(number) → time` | Create time from Unix seconds (integer or fractional) in UTC |
+| `time::from_unix(n, unit)` | `(number, string) → time` | Unit: `"s"`, `"ms"`, `"us"`, or `"ns"` |
+| `time::strptime(format, s)` | `(string, string) → time` | Parse with strftime-style format |
+| `time::strptime(format, s, tz)` | `(string, string, string) → time` | Parse with strftime format; apply IANA timezone |
 
 ### Timestamp — Formatting
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `formattime(format, t)` | `(string, time) → string` | Format with Go reference-time format or `@name` alias |
-| `strftime(format, t)` | `(string, time) → string` | Format with strftime/C-style format |
+| `time::format(format, t)` | `(string, time) → string` | Format with Go reference-time format or `@name` alias |
+| `time::strftime(format, t)` | `(string, time) → string` | Format with strftime / C-style format |
 
 ### Timestamp — Arithmetic
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `timeadd(t, d)` | `(time, duration) → time` | Add duration to time (also accepts string forms for backward compat) |
-| `timesub(t1, t2)` | `(time, time) → duration` | Elapsed from `t2` to `t1`; negative if `t1 < t2` |
-| `timesub(t, d)` | `(time, duration) → time` | Subtract duration from time |
-| `since(t)` | `(time) → duration` | Elapsed since `t` |
-| `until(t)` | `(time) → duration` | Time remaining until `t` |
-| `addyears(t, n)` | `(time, number) → time` | Add `n` calendar years |
-| `addmonths(t, n)` | `(time, number) → time` | Add `n` calendar months |
-| `adddays(t, n)` | `(time, number) → time` | Add `n` calendar days |
+| `time::add(t, d)` | `(time, duration) → time` | Add a duration to a time. Either argument may be a string: a timestamp as RFC 3339, a duration in Go or ISO 8601 syntax. Always returns a `time`. |
+| `time::sub(t1, t2)` | `(time, time) → duration` | Elapsed from `t2` to `t1`; negative if `t1 < t2` |
+| `time::sub(t, d)` | `(time, duration) → time` | Subtract duration from time |
+| `time::since(t)` | `(time) → duration` | Elapsed since `t` |
+| `time::until(t)` | `(time) → duration` | Time remaining until `t` |
+| `time::add_years(t, n)` | `(time, number) → time` | Add `n` calendar years |
+| `time::add_months(t, n)` | `(time, number) → time` | Add `n` calendar months |
+| `time::add_days(t, n)` | `(time, number) → time` | Add `n` calendar days |
 
 ### Timestamp — Decomposition
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `unix(t)` | `(time) → number` | Unix epoch as fractional seconds |
-| `unix(t, unit)` | `(time, string) → number` | Unix epoch in unit: `"s"` (float), `"ms"`, `"us"`, `"ns"` (integers) |
-| `timezone()` | `() → string` | System local timezone name |
-| `timezone(t)` | `(time) → string` | Stored timezone name |
-| `intimezone(t, tz)` | `(time, string) → time` | Re-express `t` in given IANA timezone |
+| `time::to_unix(t)` | `(time) → number` | Unix epoch as fractional seconds |
+| `time::to_unix(t, unit)` | `(time, string) → number` | Unix epoch in unit: `"s"` (float), `"ms"`, `"us"`, `"ns"` (integers) |
+| `time::zone()` | `() → string` | System local timezone name |
+| `time::zone(t)` | `(time) → string` | Stored timezone name |
+| `time::in_zone(t, tz)` | `(time, string) → time` | Re-express `t` in given IANA timezone |
 
 Calendar fields (`year`, `month`, `day`, `hour`, `minute`, `second`, `nanosecond`, `weekday`, `yearday`, `isoweek`, `isoyear`) are extracted via the rich-cty-types generic `get(t, part)` function — see [rich-cty-types integration](#rich-cty-types-integration).
 
@@ -163,8 +190,8 @@ go-cty v1.18 does not support ordering operators for capsule types. Use these fu
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `timebefore(t1, t2)` | `(time, time) → bool` | True if `t1` is before `t2` |
-| `timeafter(t1, t2)` | `(time, time) → bool` | True if `t1` is after `t2` |
+| `time::before(t1, t2)` | `(time, time) → bool` | True if `t1` is before `t2` |
+| `time::after(t1, t2)` | `(time, time) → bool` | True if `t1` is after `t2` |
 
 ### Duration — Creation
 
@@ -177,8 +204,8 @@ go-cty v1.18 does not support ordering operators for capsule types. Use these fu
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `formatduration(d)` | `(duration) → string` | Go format (e.g. `"1h30m5s"`) |
-| `formatduration(d, fmt)` | `(duration, string) → string` | `fmt` is `"go"` (default) or `"iso"` (ISO 8601 P-notation) |
+| `duration::format(d)` | `(duration) → string` | Go format (e.g. `"1h30m5s"`) |
+| `duration::format(d, fmt)` | `(duration, string) → string` | `fmt` is `"go"` (default) or `"iso"` (ISO 8601 P-notation) |
 
 ### Duration — Arithmetic
 
@@ -186,15 +213,15 @@ Duration in a given unit is extracted via the rich-cty-types generic `get(d, uni
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `absduration(d)` | `(duration) → duration` | Absolute value |
-| `durationadd(d1, d2)` | `(duration, duration) → duration` | Sum |
-| `durationsub(d1, d2)` | `(duration, duration) → duration` | Difference |
-| `durationmul(d, n)` | `(duration, number) → duration` | Scale by factor |
-| `durationdiv(d, n)` | `(duration, number) → duration` | Divide by factor |
-| `durationtruncate(d, m)` | `(duration, duration) → duration` | Truncate to multiple of `m` |
-| `durationround(d, m)` | `(duration, duration) → duration` | Round to nearest multiple of `m` |
-| `durationlt(d1, d2)` | `(duration, duration) → bool` | True if `d1 < d2` |
-| `durationgt(d1, d2)` | `(duration, duration) → bool` | True if `d1 > d2` |
+| `duration::abs(d)` | `(duration) → duration` | Absolute value |
+| `duration::add(d1, d2)` | `(duration, duration) → duration` | Sum |
+| `duration::sub(d1, d2)` | `(duration, duration) → duration` | Difference |
+| `duration::mul(d, n)` | `(duration, number) → duration` | Scale by factor |
+| `duration::div(d, n)` | `(duration, number) → duration` | Divide by factor |
+| `duration::truncate(d, m)` | `(duration, duration) → duration` | Truncate to multiple of `m` |
+| `duration::round(d, m)` | `(duration, duration) → duration` | Round to nearest multiple of `m` |
+| `duration::lt(d1, d2)` | `(duration, duration) → bool` | True if `d1 < d2` |
+| `duration::gt(d1, d2)` | `(duration, duration) → bool` | True if `d1 > d2` |
 
 ### DNS Zone Serials
 
@@ -202,60 +229,60 @@ Functions for working with DNS zone serial numbers in `YYYYMMDDNN` format.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `nextzoneserial(s)` | `(number\|string) → number` | Next serial after `s`, using today's date |
-| `nextzoneserial(s, t)` | `(number\|string, time) → number` | Next serial using date from `t` |
-| `parsezoneserial(s)` | `(number\|string) → time` | Parse serial back to approximate date (UTC midnight) |
+| `dns::next_zone_serial(s)` | `(number\|string) → number` | Next serial after `s`, using today's date |
+| `dns::next_zone_serial(s, t)` | `(number\|string, time) → number` | Next serial using date from `t` |
+| `dns::parse_zone_serial(s)` | `(number\|string) → time` | Parse serial back to approximate date (UTC midnight) |
 
 ## Examples
 
 ```hcl
 # Current time
-now("UTC")
-now("America/New_York")
+time::now("UTC")
+time::now("America/New_York")
 
 # Parse
-parsetime("2024-01-15T10:30:00Z")
-parsetime("2006-01-02", "2024-01-15", "UTC")
-strptime("%Y-%m-%d", "2024-01-15")
+time::parse("2024-01-15T10:30:00Z")
+time::parse("2006-01-02", "2024-01-15", "UTC")
+time::strptime("%Y-%m-%d", "2024-01-15")
 
 # Format
-formattime("@date", now("UTC"))           # "2024-01-15"
-formattime("2006-01-02", now("UTC"))      # same
-strftime("%Y-%m-%d", now("UTC"))          # same
+time::format("@date", time::now("UTC"))           # "2024-01-15"
+time::format("2006-01-02", time::now("UTC"))      # same
+time::strftime("%Y-%m-%d", time::now("UTC"))          # same
 
 # Arithmetic
-timeadd(now("UTC"), duration("1h30m"))
-timesub(end_time, start_time)             # → duration
-timesub(deadline, duration(30, "m"))      # → time
+time::add(time::now("UTC"), duration("1h30m"))
+time::sub(end_time, start_time)             # → duration
+time::sub(deadline, duration(30, "m"))      # → time
 
 # Duration
-since(start_time)
-get(since(start_time), "s")               # float seconds (requires rich-cty-types)
-formatduration(since(start_time))         # "5m32s"
-formatduration(since(start_time), "iso")  # "PT5M32S"
-tostring(since(start_time))               # "5m32s" (requires rich-cty-types)
+time::since(start_time)
+get(time::since(start_time), "s")               # float seconds (requires rich-cty-types)
+duration::format(time::since(start_time))         # "5m32s"
+duration::format(time::since(start_time), "iso")  # "PT5M32S"
+tostring(time::since(start_time))               # "5m32s" (requires rich-cty-types)
 
 # Comparison
-durationgt(since(last_seen), duration(24, "h"))
-timebefore(expires_at, now("UTC"))
+duration::gt(time::since(last_seen), duration(24, "h"))
+time::before(expires_at, time::now("UTC"))
 
 # Calendar field extraction (requires rich-cty-types)
-get(now("UTC"), "year")                   # 2024
-get(now("UTC"), "weekday")                # 0=Sun ... 6=Sat
+get(time::now("UTC"), "year")                   # 2024
+get(time::now("UTC"), "weekday")                # 0=Sun ... 6=Sat
 
 # Unix interop
-fromunix(epoch_seconds)
-fromunix(epoch_ms, "ms")
-unix(now("UTC"), "ns")
+time::from_unix(epoch_seconds)
+time::from_unix(epoch_ms, "ms")
+time::to_unix(time::now("UTC"), "ns")
 
 # Calendar
-addmonths(now("UTC"), 3)
-adddays(now("UTC"), -7)
+time::add_months(time::now("UTC"), 3)
+time::add_days(time::now("UTC"), -7)
 
 # DNS zone serials
-nextzoneserial(2026012300)                # → 2026012301
-nextzoneserial(old_serial, now("UTC"))    # → next serial for today
-parsezoneserial(2026012307)               # → 2026-01-23 00:00:00 UTC
+dns::next_zone_serial(2026012300)                # → 2026012301
+dns::next_zone_serial(old_serial, time::now("UTC"))    # → next serial for today
+dns::parse_zone_serial(2026012307)               # → 2026-01-23 00:00:00 UTC
 ```
 
 ## License
