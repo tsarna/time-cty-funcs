@@ -3,7 +3,7 @@ module github.com/tsarna/time-cty-funcs
 go 1.25.8
 
 require (
-	github.com/itchyny/timefmt-go v0.1.8
+	github.com/itchyny/timefmt-go v0.1.9
 	github.com/sosodev/duration v1.4.0
 	github.com/stretchr/testify v1.12.1
 	github.com/tsarna/rich-cty-types v0.5.1
