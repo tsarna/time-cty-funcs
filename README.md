@@ -1,5 +1,13 @@
 # time-cty-funcs
 
+> [!WARNING]
+> **Moved.** This package is now `github.com/tsarna/ctyx/timecty`, part of
+> [ctyx](https://github.com/tsarna/ctyx) — nine cty helper modules merged into
+> one. The code and API are unchanged; only the import path moved. This
+> repository is archived and frozen at v0.5.0.
+>
+> `go get github.com/tsarna/ctyx`
+
 cty functions and types for dealing with time; mainly used in HCL2 templates.
 
 [![CI](https://github.com/tsarna/time-cty-funcs/actions/workflows/ci.yml/badge.svg)](https://github.com/tsarna/time-cty-funcs/actions/workflows/ci.yml)
